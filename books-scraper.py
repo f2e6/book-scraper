@@ -11,8 +11,8 @@ book_titles = soup.find_all("span", class_="title")
 
 book_links = soup.find_all("a", class_="link")
 
-book_titles = book_titles[4:]
-book_links = book_links[4:]
+# book_titles = book_titles[4:]
+# book_links = book_links[4:]
 
 for i, book_title in enumerate(book_titles):
     print(str(i+1) + ". " + book_title.text)
