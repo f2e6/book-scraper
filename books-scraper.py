@@ -1,39 +1,40 @@
-import requests
-from bs4 import BeautifulSoup
-import os
+import requests, os; from bs4 import BeautifulSoup
 
-query = input("Enter a book title: ")
-response = requests.get("https://www.gutenberg.org/ebooks/search/?query=" + query)
-
-soup = BeautifulSoup(response.text, "html.parser")
-
-book_titles = soup.find_all("span", class_="title")
-
-book_links = soup.find_all("a", class_="link")
-
-book_titles = book_titles[2:]
-book_links = book_links[2:]
-
-for i, book_title in enumerate(book_titles):
-    print(str(i+1) + ". " + book_title.text)
-
-selected_book = int(input("Enter the number of the book you want to open: "))
-
-if selected_book < 1 or selected_book > len(book_links):
-    print("Invalid input")
-else:
-    selected_url = book_links[selected_book - 1]["href"]
-    selected_url = f"https://www.gutenberg.org{selected_url}"
-    # use BeautifulSoup to extract the link from the selected URL
-    response = requests.get(selected_url)
+def get_book_links(query):
+    response = requests.get(f"https://www.gutenberg.org/ebooks/search/?query={query}")
     soup = BeautifulSoup(response.text, "html.parser")
-    link = soup.find("td", class_="noscreen").text
-    file = link.replace(".html.images", ".epub3.images")
-   
-    response = requests.get(file)
-    file = file.replace("3.images", "")
-    with open("/tmp/" + file.split("/")[-1], "wb") as f:
-        f.write(response.content)
+    book_links = soup.select(".booklink > a")
+    return [(link.select_one(".title").text.strip(), f"https://www.gutenberg.org{link['href']}") for link in book_links]
 
-    os.system(f"zathura /tmp/{file.split('/')[-1]}")
-    os.remove("/tmp/" + file.split("/")[-1])
+def download_book(book_url):
+    response = requests.get(book_url)
+    soup = BeautifulSoup(response.text, "html.parser")
+    download_link = soup.select_one(".epub > a")
+    if not download_link:
+        raise ValueError("The book does not have an EPUB download link.")
+    epub_url = download_link["href"].replace(".html.images", ".epub.images")
+    epub_filename = epub_url.split("/")[-1]
+    response = requests.get(epub_url)
+    with open(os.path.join("/tmp", epub_filename), "wb") as f:
+        f.write(response.content)
+    return epub_filename
+
+def main():
+    try:
+        query = input("Enter a book title: ")
+        book_links = get_book_links(query)
+        if not book_links:
+            print("No results found.")
+            return
+        for i, (title, _) in enumerate(book_links, 1):
+            print(f"{i}. {title}")
+        selected_index = int(input(f"Enter a number between 1 and {len(book_links)} to select a book: "))
+        selected_title, selected_url = book_links[selected_index - 1]
+        epub_filename = download_book(selected_url)
+        os.system(f"zathura /tmp/{epub_filename}")
+        os.remove(os.path.join("/tmp", epub_filename))
+    except (ValueError, requests.exceptions.RequestException) as e:
+        print(f"Error: {e}")
+
+if __name__ == "__main__":
+    main()
